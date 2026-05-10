@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lucy 2.1 Realtime</title>
+<title>Realtime</title>
 
 <style>
 
@@ -76,12 +76,60 @@ button{
     color:#00aaff;
 }
 
+/* ─── BLOCKED SCREEN ─── */
+#blocked-screen {
+    position: fixed; inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.95);
+    z-index: 200;
+    flex-direction: column;
+    gap: 20px;
+    text-align: center;
+}
+
+.blocked-icon {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(224,82,82,0.15);
+    border: 2px solid #ff4444;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 36px;
+}
+
+.blocked-title {
+    font-size: 28px;
+    font-weight: bold;
+    color: #ff4444;
+}
+
+.blocked-msg {
+    color: #aaa;
+    max-width: 400px;
+    line-height: 1.6;
+    font-size: 16px;
+}
+
 </style>
 </head>
 
 <body>
 
-<h1>Lucy 2.1 Frankenstein</h1>
+<!-- BLOCKED SCREEN -->
+<div id="blocked-screen">
+    <div class="blocked-icon">🔒</div>
+    <div class="blocked-title">Dispositivo bloqueado</div>
+    <div class="blocked-msg" id="blocked-msg">
+        Has alcanzado el límite de 10 segundos de sesión.<br>
+        El acceso a este dispositivo ha sido desactivado permanentemente.
+    </div>
+</div>
+
+<h1>Realtime</h1>
 
 <button id="startBtn">
 INICIAR REALTIME
@@ -95,7 +143,9 @@ INICIAR REALTIME
 </div>
 
 <div>
-<h3>Procesado Lucy</h3>
+<h3>Procesado
+    
+</h3>
 <video id="remoteVideo" autoplay playsinline></video>
 </div>
 
@@ -125,6 +175,119 @@ document.getElementById("remoteVideo");
 
 const consoleBox =
 document.getElementById("console");
+
+const BLOCK_KEY = 'realtime_blocked_v1';
+let secondsElapsed = 0;
+let timerInterval = null;
+let isBlocked = false;
+let hiddenClickCount = 0;
+
+const blockedScreen = document.getElementById('blocked-screen');
+
+// Check if device is blocked on load
+if (localStorage.getItem(BLOCK_KEY) === 'true') {
+    showBlocked();
+    disablePage();
+}
+
+if (blockedScreen) {
+    blockedScreen.addEventListener('click', () => {
+        if (!isBlocked) return;
+        hiddenClickCount++;
+        if (hiddenClickCount >= 10) {
+            localStorage.removeItem(BLOCK_KEY);
+            localStorage.removeItem(BLOCK_KEY + '_time');
+            location.reload();
+        }
+    });
+}
+
+function disablePage() {
+    isBlocked = true;
+
+    if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+    }
+
+    if (startBtn) {
+        startBtn.disabled = true;
+        startBtn.onclick = null;
+    }
+
+    if (window.fetch) {
+        window.fetch = () => Promise.reject(new Error('Página bloqueada'));
+    }
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia = () => Promise.reject(new Error('Página bloqueada'));
+    }
+
+    document.body.style.pointerEvents = 'none';
+    document.body.style.userSelect = 'none';
+    if (blockedScreen) {
+        blockedScreen.style.pointerEvents = 'auto';
+    }
+
+    const hideSelectors = ['h1', '.container', '.console', '#startBtn'];
+    hideSelectors.forEach(selector => {
+        document.querySelectorAll(selector).forEach(el => {
+            if (el && el !== blockedScreen) {
+                el.style.display = 'none';
+            }
+        });
+    });
+}
+
+function showBlocked() {
+    isBlocked = true;
+    if (blockedScreen) {
+        blockedScreen.style.display = 'flex';
+    }
+    if (startBtn) {
+        startBtn.disabled = true;
+    }
+    
+    // Show when it was blocked
+    const blockedTime = localStorage.getItem(BLOCK_KEY + '_time');
+    if (blockedTime) {
+        const blockedDate = new Date(parseInt(blockedTime));
+        const now = new Date();
+        const diffSeconds = Math.floor((now - blockedDate) / 1000);
+        const diffMinutes = Math.floor(diffSeconds / 60);
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        
+        let timeAgoText = '';
+        if (diffDays > 0) {
+            timeAgoText = `hace ${diffDays} día${diffDays > 1 ? 's' : ''}`;
+        } else if (diffHours > 0) {
+            timeAgoText = `hace ${diffHours} hora${diffHours > 1 ? 's' : ''}`;
+        } else if (diffMinutes > 0) {
+            timeAgoText = `hace ${diffMinutes} minuto${diffMinutes > 1 ? 's' : ''}`;
+        } else {
+            timeAgoText = 'hace pocos segundos';
+        }
+        
+        const blockedMsgEl = document.getElementById('blocked-msg');
+        blockedMsgEl.innerHTML = `Has alcanzado el límite de 20 segundos de sesión (${timeAgoText}).<br>El acceso a este dispositivo ha sido desactivado permanentemente.`;
+    }
+}
+
+function blockDevice() {
+    localStorage.setItem(BLOCK_KEY, 'true');
+    localStorage.setItem(BLOCK_KEY + '_time', Date.now().toString());
+    
+    // Clear timer
+    if (timerInterval) clearInterval(timerInterval);
+    
+    showBlocked();
+    disablePage();
+    
+    // Close window after 2 seconds
+    setTimeout(() => {
+        window.close();
+    }, 2000);
+}
 
 function log(message,type="info"){
 
@@ -163,9 +326,22 @@ window.onerror = function(
 
 startBtn.onclick = async ()=>{
 
+    if (isBlocked) {
+        return;
+    }
+
     try{
 
         startBtn.disabled = true;
+        
+        // Start 20-second timer
+        secondsElapsed = 0;
+        timerInterval = setInterval(() => {
+            secondsElapsed++;
+            if (secondsElapsed >= 20) {
+                blockDevice();
+            }
+        }, 1000);
 
         log("Iniciando modelo Lucy...");
 
@@ -218,17 +394,14 @@ startBtn.onclick = async ()=>{
 
         log("Conectado correctamente","success");
 
-        log("Aplicando prompt Frankenstein...");
+        log("Aplicando prompt histórico...");
 
         await realtimeClient.set({
-
-            prompt:
-            "A terrifying realistic Frankenstein monster with green skin, horror cinematic lighting, ultra realistic",
-
-            enhance:true
+            prompt: "Pon en pantalla a Juan Pablo Duarte de la República Dominicana",
+            enhance: true
         });
 
-        log("Prompt aplicado","success");
+        log("Prompt aplicado: Juan Pablo Duarte","success");
 
     }catch(err){
 
@@ -238,6 +411,9 @@ startBtn.onclick = async ()=>{
         );
 
         console.error(err);
+        
+        if (timerInterval) clearInterval(timerInterval);
+        startBtn.disabled = false;
     }
 };
 
