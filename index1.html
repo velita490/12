@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucy 2.1 Realtime</title>
+
+<style>
+
+body{
+    margin:0;
+    background:#111;
+    color:white;
+    font-family:Arial;
+    text-align:center;
+    padding:20px;
+}
+
+h1{
+    margin-bottom:10px;
+}
+
+.container{
+    display:flex;
+    justify-content:center;
+    gap:20px;
+    flex-wrap:wrap;
+    margin-top:20px;
+}
+
+video{
+    width:420px;
+    height:320px;
+    background:black;
+    border-radius:12px;
+    border:2px solid #333;
+    object-fit:cover;
+}
+
+button{
+    padding:15px 25px;
+    border:none;
+    border-radius:10px;
+    font-size:16px;
+    cursor:pointer;
+    background:#00ff88;
+    color:black;
+    font-weight:bold;
+    margin-top:20px;
+}
+
+.console{
+    width:90%;
+    max-width:1000px;
+    height:220px;
+    background:black;
+    border:2px solid #333;
+    border-radius:10px;
+    margin:30px auto;
+    overflow:auto;
+    text-align:left;
+    padding:10px;
+    font-family:monospace;
+    font-size:14px;
+}
+
+.success{
+    color:#00ff88;
+}
+
+.error{
+    color:#ff4444;
+}
+
+.info{
+    color:#00aaff;
+}
+
+</style>
+</head>
+
+<body>
+
+<h1>Lucy 2.1 Frankenstein</h1>
+
+<button id="startBtn">
+INICIAR REALTIME
+</button>
+
+<div class="container">
+
+<div>
+<h3>Tu Cámara</h3>
+<video id="localVideo" autoplay playsinline muted></video>
+</div>
+
+<div>
+<h3>Procesado Lucy</h3>
+<video id="remoteVideo" autoplay playsinline></video>
+</div>
+
+</div>
+
+<div class="console" id="console"></div>
+
+<script type="module">
+
+import {
+    createDecartClient,
+    models
+}
+from "https://esm.sh/@decartai/sdk";
+
+const API_KEY =
+"dct_la-2_IglEOouvRoucIfkcdeYkwpCXKqDvcGsaPfuCQPRXLXUzjpwLIeHPXahoYomflbil";
+
+const startBtn =
+document.getElementById("startBtn");
+
+const localVideo =
+document.getElementById("localVideo");
+
+const remoteVideo =
+document.getElementById("remoteVideo");
+
+const consoleBox =
+document.getElementById("console");
+
+function log(message,type="info"){
+
+    const div =
+    document.createElement("div");
+
+    div.className = type;
+
+    const time =
+    new Date().toLocaleTimeString();
+
+    div.innerHTML =
+    "[" + time + "] " + message;
+
+    consoleBox.appendChild(div);
+
+    consoleBox.scrollTop =
+    consoleBox.scrollHeight;
+
+    console.log(message);
+}
+
+window.onerror = function(
+    msg,
+    src,
+    line,
+    col,
+    err
+){
+    log(
+        "ERROR: " + msg +
+        " | Línea: " + line,
+        "error"
+    );
+};
+
+startBtn.onclick = async ()=>{
+
+    try{
+
+        startBtn.disabled = true;
+
+        log("Iniciando modelo Lucy...");
+
+        const model =
+        models.realtime("lucy-2.1");
+
+        log("Solicitando cámara...");
+
+        const stream =
+        await navigator.mediaDevices.getUserMedia({
+            audio:true,
+            video:{
+                frameRate:model.fps,
+                width:model.width,
+                height:model.height
+            }
+        });
+
+        localVideo.srcObject = stream;
+
+        log("Cámara iniciada","success");
+
+        log("Creando cliente Decart...");
+
+        const client =
+        createDecartClient({
+            apiKey:API_KEY
+        });
+
+        log("Conectando realtime...");
+
+        const realtimeClient =
+        await client.realtime.connect(
+            stream,
+            {
+                model,
+
+                onRemoteStream:(editedStream)=>{
+
+                    log(
+                        "Stream procesado recibido",
+                        "success"
+                    );
+
+                    remoteVideo.srcObject =
+                    editedStream;
+                }
+            }
+        );
+
+        log("Conectado correctamente","success");
+
+        log("Aplicando prompt Frankenstein...");
+
+        await realtimeClient.set({
+
+            prompt:
+            "A terrifying realistic Frankenstein monster with green skin, horror cinematic lighting, ultra realistic",
+
+            enhance:true
+        });
+
+        log("Prompt aplicado","success");
+
+    }catch(err){
+
+        log(
+            "ERROR GENERAL: " + err,
+            "error"
+        );
+
+        console.error(err);
+    }
+};
+
+log("Sistema listo");
+
+</script>
+
+</body>
+</html>
